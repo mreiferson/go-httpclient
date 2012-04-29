@@ -1,0 +1,1 @@
+{"name":"go-httpclient","body":"### Install\r\n\r\n    go get github.com/mreiferson/go-httpclient","tagline":"a client-side wrapper for Go's built in http package","google":"","note":"Don't delete this file! It's used internally to help with page regeneration."}
