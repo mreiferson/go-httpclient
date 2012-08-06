@@ -1,12 +1,18 @@
 package httpclient
 
 import (
+	"container/list"
 	"crypto/tls"
 	"errors"
 	"net"
 	"net/http"
 	"time"
 )
+
+type connCache struct {
+	dl          *list.List
+	outstanding int
+}
 
 // HttpClient wraps Go's built in HTTP client providing an API to:
 //    * set connect timeout
@@ -18,16 +24,21 @@ import (
 // inability of the built in API to provide access to the connection 
 // and the resulting hack to work around that)
 type HttpClient struct {
-	client           *http.Client
-	conn             net.Conn
-	ConnectTimeout   time.Duration
-	ReadWriteTimeout time.Duration
-	MaxRedirects     int
+	client              *http.Client
+	cachedConns         map[string]*connCache
+	Conn                net.Conn
+	ConnectTimeout      time.Duration
+	ReadWriteTimeout    time.Duration
+	MaxRedirects        int
+	MaxIdleConnsPerHost int
 }
 
 func New(skipInvalidSSL bool) *HttpClient {
 	client := &http.Client{}
-	h := &HttpClient{client: client}
+	h := &HttpClient{
+		client:      client,
+		cachedConns: make(map[string]*connCache),
+	}
 
 	dialFunc := func(netw, addr string) (net.Conn, error) {
 		return h.dial(netw, addr)
@@ -37,8 +48,9 @@ func New(skipInvalidSSL bool) *HttpClient {
 	}
 
 	transport := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: skipInvalidSSL},
-		Dial:            dialFunc,
+		TLSClientConfig:     &tls.Config{InsecureSkipVerify: skipInvalidSSL},
+		Dial:                dialFunc,
+		MaxIdleConnsPerHost: -1, // disable Go's built in connection caching
 	}
 
 	client.CheckRedirect = redirFunc
@@ -55,17 +67,42 @@ func (h *HttpClient) redirectPolicy(req *http.Request, via []*http.Request) erro
 }
 
 func (h *HttpClient) dial(netw, addr string) (net.Conn, error) {
-	deadline := time.Now().Add(h.ReadWriteTimeout + h.ConnectTimeout)
-	c, err := net.DialTimeout(netw, addr, h.ConnectTimeout)
-	if err != nil {
-		return nil, err
+	var c net.Conn
+	var err error
+
+	cc, ok := h.cachedConns[addr]
+	if ok {
+		e := cc.dl.Front()
+		if e != nil {
+			cc.dl.Remove(e)
+			c = e.Value.(net.Conn)
+		}
 	}
-	c.SetDeadline(deadline)
-	h.conn = c
+
+	if c == nil && (cc == nil || cc.outstanding < h.MaxIdleConnsPerHost) {
+		deadline := time.Now().Add(h.ReadWriteTimeout + h.ConnectTimeout)
+		c, err = net.DialTimeout(netw, addr, h.ConnectTimeout)
+		if err != nil {
+			return nil, err
+		}
+		c.SetDeadline(deadline)
+
+		if cc == nil {
+			cc = &connCache{
+				dl: list.New(),
+			}
+			h.cachedConns[addr] = cc
+		}
+		cc.dl.PushBack(c)
+		cc.outstanding++
+	}
+
+	h.Conn = c
+
 	return c, nil
 }
 
-func (h *HttpClient) Do(req *http.Request) (*http.Response, net.Conn, error) {
+func (h *HttpClient) Do(req *http.Request) (*http.Response, error) {
 	resp, err := h.client.Do(req)
-	return resp, h.conn, err
+	return resp, err
 }
