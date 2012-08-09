@@ -4,6 +4,7 @@ import (
 	"container/list"
 	"crypto/tls"
 	"errors"
+	"log"
 	"net"
 	"net/http"
 	"time"
@@ -36,8 +37,10 @@ type HttpClient struct {
 func New(skipInvalidSSL bool) *HttpClient {
 	client := &http.Client{}
 	h := &HttpClient{
-		client:      client,
-		cachedConns: make(map[string]*connCache),
+		client:           client,
+		cachedConns:      make(map[string]*connCache),
+		ConnectTimeout:   5 * time.Second,
+		ReadWriteTimeout: 5 * time.Second,
 	}
 
 	dialFunc := func(netw, addr string) (net.Conn, error) {
@@ -70,33 +73,30 @@ func (h *HttpClient) dial(netw, addr string) (net.Conn, error) {
 	var c net.Conn
 	var err error
 
+	log.Printf("checking cache")
 	cc, ok := h.cachedConns[addr]
 	if ok {
+		log.Printf("addr in cache")
 		e := cc.dl.Front()
 		if e != nil {
+			log.Printf("returning conn")
+			cc.outstanding--
 			cc.dl.Remove(e)
 			c = e.Value.(net.Conn)
 		}
 	}
 
 	if c == nil && (cc == nil || cc.outstanding < h.MaxIdleConnsPerHost) {
+		log.Printf("new connection")
 		deadline := time.Now().Add(h.ReadWriteTimeout + h.ConnectTimeout)
 		c, err = net.DialTimeout(netw, addr, h.ConnectTimeout)
 		if err != nil {
 			return nil, err
 		}
 		c.SetDeadline(deadline)
-
-		if cc == nil {
-			cc = &connCache{
-				dl: list.New(),
-			}
-			h.cachedConns[addr] = cc
-		}
-		cc.dl.PushBack(c)
-		cc.outstanding++
 	}
 
+	log.Printf("returning %v", c)
 	h.Conn = c
 
 	return c, nil
@@ -104,5 +104,22 @@ func (h *HttpClient) dial(netw, addr string) (net.Conn, error) {
 
 func (h *HttpClient) Do(req *http.Request) (*http.Response, error) {
 	resp, err := h.client.Do(req)
+	if err == nil {
+		log.Printf("request succeeded... caching conn")
+		addr := req.URL.Host
+		cc, ok := h.cachedConns[addr]
+		if !ok {
+			log.Printf("addr not in cache")
+			cc = &connCache{
+				dl: list.New(),
+			}
+			h.cachedConns[addr] = cc
+		}
+		log.Printf("adding conn to cache")
+		cc.dl.PushBack(h.Conn)
+		cc.outstanding++
+	} else {
+		h.Conn.Close()
+	}
 	return resp, err
 }
