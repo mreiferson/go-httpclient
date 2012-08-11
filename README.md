@@ -27,6 +27,45 @@ func (h *HttpClient) GetConn(req *http.Request) (net.Conn, error)
 func (h *HttpClient) RoundTrip(req *http.Request) (*http.Response, error)
 ```
 
+#### Example
+
+```go
+package main
+
+import (
+    "httpclient"
+    "io/ioutil"
+    "log"
+    "net/http"
+    "time"
+)
+
+func main() {
+    httpClient := New()
+    httpClient.ConnectTimeout = time.Second
+    httpClient.ReadWriteTimeout = time.Second
+
+    req, _ := http.NewRequest("GET", "http://127.0.0.1/test", nil)
+
+    resp, err := httpClient.Do(req)
+    if err != nil {
+        log.Fatalf("request failed - %s", err.Error())
+    }
+    defer resp.Body.Close()
+
+    conn, err := httpClient.GetConn(req)
+    if err != nil {
+        log.Fatalf("failed to get conn for req")
+    }
+    // do something with conn
+
+    body, err := ioutil.ReadAll(resp.Body)
+    log.Printf("%s", body)
+
+    httpClient.FinishRequest(req)
+}
+```
+
 #### TODO
 
  * HTTPS support
