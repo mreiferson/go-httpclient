@@ -6,9 +6,11 @@ import (
 	"net"
 	"net/http"
 	"testing"
+	"time"
 )
 
 func testHandler(w http.ResponseWriter, req *http.Request) {
+	time.Sleep(200 * time.Millisecond)
 	io.WriteString(w, "hello, world!\n")
 }
 
@@ -29,7 +31,7 @@ func setupMockServer(t *testing.T) net.Addr {
 
 func TestHttpClient(t *testing.T) {
 	addr := setupMockServer(t)
-	httpClient := New(false)
+	httpClient := New()
 	if httpClient == nil {
 		t.Fatalf("failed to instantiate HttpClient")
 	}
@@ -46,15 +48,19 @@ func TestHttpClient(t *testing.T) {
 		t.Fatalf("1st failed to read body - %s", err.Error())
 	}
 	t.Logf("%s", body)
+	httpClient.FinishRequest(req)
 
+	httpClient.ReadWriteTimeout = 50 * time.Millisecond
+	resp, err = httpClient.Do(req)
+	if err == nil {
+		t.Fatalf("2nd request should have timed out")
+	}
+	httpClient.FinishRequest(req)
+
+	httpClient.ReadWriteTimeout = 250 * time.Millisecond
 	resp, err = httpClient.Do(req)
 	if err != nil {
-		t.Fatalf("2nd request failed - %s", err.Error())
+		t.Fatalf("3nd request should not have timed out")
 	}
-	defer resp.Body.Close()
-	body, err = ioutil.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("2nd failed to read body - %s", err.Error())
-	}
-	t.Logf("%s", body)
+	httpClient.FinishRequest(req)
 }

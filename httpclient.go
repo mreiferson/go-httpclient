@@ -1,12 +1,14 @@
 package httpclient
 
 import (
+	"bufio"
 	"container/list"
-	"crypto/tls"
 	"errors"
 	"log"
 	"net"
 	"net/http"
+	"strings"
+	"sync"
 	"time"
 )
 
@@ -18,43 +20,37 @@ type connCache struct {
 // HttpClient wraps Go's built in HTTP client providing an API to:
 //    * set connect timeout
 //    * set read/write timeout
-//    * skip invalid SSL certificates
-//    * return the connection object from Do()
+//    * easy access to the connection object for a given request
 //
-// NOTE: this client is not goroutine safe (this is a result of the 
-// inability of the built in API to provide access to the connection 
-// and the resulting hack to work around that)
+// TODO: https support
 type HttpClient struct {
-	client              *http.Client
-	cachedConns         map[string]*connCache
-	Conn                net.Conn
-	ConnectTimeout      time.Duration
-	ReadWriteTimeout    time.Duration
-	MaxRedirects        int
-	MaxIdleConnsPerHost int
+	sync.RWMutex
+	client           *http.Client
+	cachedConns      map[string]*connCache
+	connMap          map[*http.Request]net.Conn
+	ConnectTimeout   time.Duration
+	ReadWriteTimeout time.Duration
+	MaxRedirects     int
+	MaxConnsPerHost  int
 }
 
-func New(skipInvalidSSL bool) *HttpClient {
+func New() *HttpClient {
 	client := &http.Client{}
 	h := &HttpClient{
 		client:           client,
 		cachedConns:      make(map[string]*connCache),
+		connMap:          make(map[*http.Request]net.Conn),
 		ConnectTimeout:   5 * time.Second,
 		ReadWriteTimeout: 5 * time.Second,
+		MaxConnsPerHost:  5,
 	}
 
-	dialFunc := func(netw, addr string) (net.Conn, error) {
-		return h.dial(netw, addr)
-	}
 	redirFunc := func(r *http.Request, v []*http.Request) error {
 		return h.redirectPolicy(r, v)
 	}
 
-	transport := &http.Transport{
-		TLSClientConfig:     &tls.Config{InsecureSkipVerify: skipInvalidSSL},
-		Dial:                dialFunc,
-		MaxIdleConnsPerHost: -1, // disable Go's built in connection caching
-	}
+	transport := &http.Transport{}
+	transport.RegisterProtocol("hc_http", h)
 
 	client.CheckRedirect = redirFunc
 	client.Transport = transport
@@ -69,57 +65,139 @@ func (h *HttpClient) redirectPolicy(req *http.Request, via []*http.Request) erro
 	return nil
 }
 
-func (h *HttpClient) dial(netw, addr string) (net.Conn, error) {
+func (h *HttpClient) RoundTrip(req *http.Request) (*http.Response, error) {
 	var c net.Conn
 	var err error
 
-	log.Printf("checking cache")
-	cc, ok := h.cachedConns[addr]
-	if ok {
-		log.Printf("addr in cache")
-		e := cc.dl.Front()
-		if e != nil {
-			log.Printf("returning conn")
-			cc.outstanding--
-			cc.dl.Remove(e)
-			c = e.Value.(net.Conn)
-		}
+	addr := req.URL.Host
+	if !hasPort(addr) {
+		addr = addr + ":80"
 	}
 
-	if c == nil && (cc == nil || cc.outstanding < h.MaxIdleConnsPerHost) {
-		log.Printf("new connection")
-		deadline := time.Now().Add(h.ReadWriteTimeout + h.ConnectTimeout)
-		c, err = net.DialTimeout(netw, addr, h.ConnectTimeout)
+	c, err = h.checkConnCache(addr)
+	if err != nil {
+		return nil, err
+	}
+
+	if c == nil {
+		c, err = net.DialTimeout("tcp", addr, h.ConnectTimeout)
 		if err != nil {
 			return nil, err
 		}
-		c.SetDeadline(deadline)
 	}
 
-	log.Printf("returning %v", c)
-	h.Conn = c
+	h.Lock()
+	h.connMap[req] = c
+	h.Unlock()
+
+	return h.exec(c, req)
+}
+
+func (h *HttpClient) checkConnCache(addr string) (net.Conn, error) {
+	var c net.Conn
+
+	h.Lock()
+	defer h.Unlock()
+
+	cc, ok := h.cachedConns[addr]
+	if ok {
+		// address is in map, check the connection list
+		e := cc.dl.Front()
+		if e != nil {
+			cc.dl.Remove(e)
+			c = e.Value.(net.Conn)
+		}
+	} else {
+		// this client hasnt seen this address before
+		cc = &connCache{
+			dl: list.New(),
+		}
+		h.cachedConns[addr] = cc
+	}
+
+	// TODO: implement accounting for outstanding connections
+	if cc.outstanding > h.MaxConnsPerHost {
+		return nil, errors.New("too many outstanding conns on this addr")
+	}
 
 	return c, nil
 }
 
-func (h *HttpClient) Do(req *http.Request) (*http.Response, error) {
-	resp, err := h.client.Do(req)
-	if err == nil {
-		log.Printf("request succeeded... caching conn")
-		addr := req.URL.Host
-		cc, ok := h.cachedConns[addr]
-		if !ok {
-			log.Printf("addr not in cache")
-			cc = &connCache{
-				dl: list.New(),
-			}
-			h.cachedConns[addr] = cc
-		}
-		log.Printf("adding conn to cache")
-		cc.dl.PushBack(h.Conn)
-		cc.outstanding++
-	} else {
-		h.Conn.Close()
+func (h *HttpClient) cacheConn(addr string, conn net.Conn) error {
+	h.Lock()
+	defer h.Unlock()
+
+	cc, ok := h.cachedConns[addr]
+	if !ok {
+		return errors.New("addr %s not in cache map")
 	}
+	cc.dl.PushBack(conn)
+
+	return nil
+}
+
+func (h *HttpClient) exec(conn net.Conn, req *http.Request) (*http.Response, error) {
+	deadline := time.Now().Add(h.ReadWriteTimeout)
+	conn.SetDeadline(deadline)
+
+	bw := bufio.NewWriter(conn)
+	br := bufio.NewReader(conn)
+
+	err := req.Write(bw)
+	if err != nil {
+		return nil, err
+	}
+	bw.Flush()
+
+	return http.ReadResponse(br, req)
+}
+
+func (h *HttpClient) GetConn(req *http.Request) (net.Conn, error) {
+	h.Lock()
+	defer h.Unlock()
+
+	conn, ok := h.connMap[req]
+	if !ok {
+		return nil, errors.New("connection not in map")
+	}
+
+	return conn, nil
+}
+
+func (h *HttpClient) Do(req *http.Request) (*http.Response, error) {
+	// h@x0r Go's http client to use our RoundTripper
+	req.URL.Scheme = "hc_http"
+
+	resp, err := h.client.Do(req)
+	if err != nil {
+		conn, _ := h.GetConn(req)
+		if conn == nil {
+			log.Panicf("PANIC: could not find connection for failed request")
+		}
+
+		conn.Close()
+
+		h.Lock()
+		delete(h.connMap, req)
+		h.Unlock()
+	}
+
 	return resp, err
 }
+
+func (h *HttpClient) FinishRequest(req *http.Request) error {
+	conn, err := h.GetConn(req)
+	if err != nil {
+		return err
+	}
+
+	h.Lock()
+	delete(h.connMap, req)
+	h.Unlock()
+
+	return h.cacheConn(req.URL.Host, conn)
+}
+
+// Given a string of the form "host", "host:port", or "[ipv6::address]:port",
+// return true if the string includes a port.
+func hasPort(s string) bool { return strings.LastIndex(s, ":") > strings.LastIndex(s, "]") }
