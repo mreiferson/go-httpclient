@@ -158,8 +158,8 @@ func (h *HttpClient) exec(conn net.Conn, req *http.Request) (*http.Response, err
 }
 
 func (h *HttpClient) GetConn(req *http.Request) (net.Conn, error) {
-	h.Lock()
-	defer h.Unlock()
+	h.RLock()
+	defer h.RUnlock()
 
 	conn, ok := h.connMap[req]
 	if !ok {
