@@ -12,6 +12,11 @@ import (
 	"time"
 )
 
+// returns the current version
+func Version() string {
+	return "0.1"
+}
+
 type connCache struct {
 	dl          *list.List
 	outstanding int
