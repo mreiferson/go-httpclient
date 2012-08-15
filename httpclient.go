@@ -14,7 +14,7 @@ import (
 
 // returns the current version
 func Version() string {
-	return "0.3.1"
+	return "0.3.2"
 }
 
 type connCache struct {
@@ -171,7 +171,7 @@ func (h *HttpClient) Do(req *http.Request) (*http.Response, error) {
 	req.URL.Scheme = "hc_http"
 
 	resp, err := h.client.Do(req)
-	if err != nil {
+	if err != nil || resp.Close || req.Close {
 		conn, _ := h.GetConn(req)
 		if conn == nil {
 			log.Panicf("PANIC: could not find connection for failed request")
