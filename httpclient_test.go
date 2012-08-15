@@ -1,21 +1,33 @@
 package httpclient
 
 import (
+	"bytes"
 	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"testing"
 	"time"
+	"sync"
 )
+
+var starter sync.Once
+var addr net.Addr
 
 func testHandler(w http.ResponseWriter, req *http.Request) {
 	time.Sleep(200 * time.Millisecond)
 	io.WriteString(w, "hello, world!\n")
 }
 
-func setupMockServer(t *testing.T) net.Addr {
+func postHandler(w http.ResponseWriter, req *http.Request) {
+	ioutil.ReadAll(req.Body)
+	w.Header().Set("Content-Length", "2")
+	io.WriteString(w, "OK")
+}
+
+func setupMockServer(t *testing.T) {
 	http.HandleFunc("/test", testHandler)
+	http.HandleFunc("/post", postHandler)
 	ln, err := net.Listen("tcp", ":0")
 	if err != nil {
 		t.Fatalf("failed to listen - %s", err.Error())
@@ -26,11 +38,12 @@ func setupMockServer(t *testing.T) net.Addr {
 			t.Fatalf("failed to start HTTP server - %s", err.Error())
 		}
 	}()
-	return ln.Addr()
+	addr = ln.Addr()
 }
 
 func TestHttpClient(t *testing.T) {
-	addr := setupMockServer(t)
+	starter.Do(func() { setupMockServer(t) })
+
 	httpClient := New()
 	if httpClient == nil {
 		t.Fatalf("failed to instantiate HttpClient")
@@ -63,4 +76,35 @@ func TestHttpClient(t *testing.T) {
 		t.Fatalf("3nd request should not have timed out")
 	}
 	httpClient.FinishRequest(req)
+}
+
+func TestManyPosts(t *testing.T) {
+	starter.Do(func() { setupMockServer(t) })
+
+	httpClient := New()
+	if httpClient == nil {
+		t.Fatalf("failed to instantiate HttpClient")
+	}
+
+	data := ""
+	for i := 0; i < 100; i++ {
+		data = data + "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	}
+	data = data + "\n"
+	
+	for i := 0; i < 10000; i++ {
+		buffer := bytes.NewBuffer([]byte(data))
+		req, _ := http.NewRequest("POST", "http://"+addr.String()+"/post", buffer)
+
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			t.Fatalf("%d post request failed - %s", i, err.Error())
+		}
+		_, err = ioutil.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("%d failed to read body - %s", i, err.Error())
+		}
+		resp.Body.Close()
+		httpClient.FinishRequest(req)
+	}
 }
