@@ -81,7 +81,6 @@ func (h *HttpClient) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	if c == nil {
-		log.Printf("   dialing...")
 		c, err = net.DialTimeout("tcp", addr, h.ConnectTimeout)
 		if err != nil {
 			return nil, err
@@ -101,20 +100,16 @@ func (h *HttpClient) checkConnCache(addr string) (net.Conn, error) {
 	h.Lock()
 	defer h.Unlock()
 
-	log.Printf("checking cache for %s", addr)
-
 	cc, ok := h.cachedConns[addr]
 	if ok {
-		log.Printf("   found entry in cache")
 		// address is in map, check the connection list
 		e := cc.dl.Front()
 		if e != nil {
-			log.Printf("   found cached connection")
 			cc.dl.Remove(e)
 			c = e.Value.(net.Conn)
 		}
 	} else {
-		log.Printf("   creating new entry in cache")
+
 		// this client hasnt seen this address before
 		cc = &connCache{
 			dl: list.New(),
@@ -134,7 +129,6 @@ func (h *HttpClient) cacheConn(addr string, conn net.Conn) error {
 	h.Lock()
 	defer h.Unlock()
 
-	log.Printf("returning connection to cache for %s", addr)
 	cc, ok := h.cachedConns[addr]
 	if !ok {
 		return errors.New("addr %s not in cache map")
