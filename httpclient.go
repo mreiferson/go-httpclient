@@ -14,7 +14,7 @@ import (
 
 // returns the current version
 func Version() string {
-	return "0.1"
+	return "0.2"
 }
 
 type connCache struct {
