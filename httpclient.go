@@ -14,7 +14,7 @@ import (
 
 // returns the current version
 func Version() string {
-	return "0.2"
+	return "0.3"
 }
 
 type connCache struct {
@@ -74,11 +74,7 @@ func (h *HttpClient) RoundTrip(req *http.Request) (*http.Response, error) {
 	var c net.Conn
 	var err error
 
-	addr := req.URL.Host
-	if !hasPort(addr) {
-		addr = addr + ":80"
-	}
-
+	addr := canonicalAddr(req.URL.Host)
 	c, err = h.checkConnCache(addr)
 	if err != nil {
 		return nil, err
@@ -207,7 +203,14 @@ func (h *HttpClient) FinishRequest(req *http.Request) error {
 	delete(h.connMap, req)
 	h.Unlock()
 
-	return h.cacheConn(req.URL.Host, conn)
+	return h.cacheConn(canonicalAddr(req.URL.Host), conn)
+}
+
+func canonicalAddr(s string) string {
+	if !hasPort(s) {
+		s = s + ":80"
+	}
+	return s
 }
 
 // Given a string of the form "host", "host:port", or "[ipv6::address]:port",
