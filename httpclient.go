@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"container/list"
 	"errors"
-	"log"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -174,7 +174,7 @@ func (h *HttpClient) Do(req *http.Request) (*http.Response, error) {
 	if err != nil || resp.Close || req.Close {
 		conn, _ := h.GetConn(req)
 		if conn == nil {
-			log.Panicf("PANIC: could not find connection for failed request")
+			return resp, err
 		}
 
 		conn.Close()
@@ -185,6 +185,23 @@ func (h *HttpClient) Do(req *http.Request) (*http.Response, error) {
 	}
 
 	return resp, err
+}
+
+func (h *HttpClient) Get(url string) (*http.Response, error) {
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	return h.Do(req)
+}
+
+func (h *HttpClient) Post(url string, contentType string, body io.Reader) (*http.Response, error) {
+	req, err := http.NewRequest("POST", url, body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", contentType)
+	return h.Do(req)
 }
 
 func (h *HttpClient) FinishRequest(req *http.Request) error {

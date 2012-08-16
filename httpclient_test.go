@@ -6,9 +6,9 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"sync"
 	"testing"
 	"time"
-	"sync"
 )
 
 var starter sync.Once
@@ -91,7 +91,7 @@ func TestManyPosts(t *testing.T) {
 		data = data + "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	}
 	data = data + "\n"
-	
+
 	for i := 0; i < 10000; i++ {
 		buffer := bytes.NewBuffer([]byte(data))
 		req, _ := http.NewRequest("POST", "http://"+addr.String()+"/post", buffer)
