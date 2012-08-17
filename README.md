@@ -69,4 +69,3 @@ func main() {
 #### TODO
 
  * HTTPS support
- * more helper methods
