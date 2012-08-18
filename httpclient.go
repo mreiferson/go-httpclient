@@ -39,6 +39,8 @@ type HttpClient struct {
 	MaxConnsPerHost  int
 }
 
+// create a new HttpClient
+// all options should be set on the instance returned
 func New() *HttpClient {
 	client := &http.Client{}
 	h := &HttpClient{
@@ -70,6 +72,8 @@ func (h *HttpClient) redirectPolicy(req *http.Request, via []*http.Request) erro
 	return nil
 }
 
+// satisfies the RoundTripper interface and handles checking
+// the connection cache or dialing (with ConnectTimeout)
 func (h *HttpClient) RoundTrip(req *http.Request) (*http.Response, error) {
 	var c net.Conn
 	var err error
@@ -154,6 +158,8 @@ func (h *HttpClient) exec(conn net.Conn, req *http.Request) (*http.Response, err
 	return http.ReadResponse(br, req)
 }
 
+// returns the connection associated with the specified request
+// cannot be called after FinishRequest
 func (h *HttpClient) GetConn(req *http.Request) (net.Conn, error) {
 	h.RLock()
 	defer h.RUnlock()
@@ -166,6 +172,7 @@ func (h *HttpClient) GetConn(req *http.Request) (net.Conn, error) {
 	return conn, nil
 }
 
+// perform the specified request
 func (h *HttpClient) Do(req *http.Request) (*http.Response, error) {
 	// h@x0r Go's http client to use our RoundTripper
 	req.URL.Scheme = "hc_http"
@@ -187,6 +194,7 @@ func (h *HttpClient) Do(req *http.Request) (*http.Response, error) {
 	return resp, err
 }
 
+// convenience method to perform a HTTP GET request
 func (h *HttpClient) Get(url string) (*http.Response, error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -195,6 +203,7 @@ func (h *HttpClient) Get(url string) (*http.Response, error) {
 	return h.Do(req)
 }
 
+// convenience method to perform a HTTP POST request
 func (h *HttpClient) Post(url string, contentType string, body io.Reader) (*http.Response, error) {
 	req, err := http.NewRequest("POST", url, body)
 	if err != nil {
@@ -204,6 +213,10 @@ func (h *HttpClient) Post(url string, contentType string, body io.Reader) (*http
 	return h.Do(req)
 }
 
+// perform final cleanup for the specified request
+// *must* be called for every request performed after processing
+// is finished and after which GetConn will no longer return
+// successfully
 func (h *HttpClient) FinishRequest(req *http.Request) error {
 	conn, err := h.GetConn(req)
 	if err != nil {
