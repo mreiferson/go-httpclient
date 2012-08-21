@@ -60,7 +60,7 @@ import (
 )
 
 func main() {
-    httpClient := New()
+    httpClient := httpclient.New()
     httpClient.ConnectTimeout = time.Second
     httpClient.ReadWriteTimeout = time.Second
 
