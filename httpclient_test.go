@@ -25,9 +25,15 @@ func postHandler(w http.ResponseWriter, req *http.Request) {
 	io.WriteString(w, "OK")
 }
 
+func redirectHandler(w http.ResponseWriter, req *http.Request) {
+	ioutil.ReadAll(req.Body)
+	http.Redirect(w, req, "/post", 302)
+}
+
 func setupMockServer(t *testing.T) {
 	http.HandleFunc("/test", testHandler)
 	http.HandleFunc("/post", postHandler)
+	http.HandleFunc("/redirect", redirectHandler)
 	ln, err := net.Listen("tcp", ":0")
 	if err != nil {
 		t.Fatalf("failed to listen - %s", err.Error())
@@ -39,6 +45,36 @@ func setupMockServer(t *testing.T) {
 		}
 	}()
 	addr = ln.Addr()
+}
+
+func TestCustomRedirectPolicy(t *testing.T) {
+	starter.Do(func() { setupMockServer(t) })
+
+	httpClient := New()
+	numRedirects := 0
+	httpClient.RedirectPolicy = func(r *http.Request, v []*http.Request) error {
+		numRedirects += 1
+		return DefaultRedirectPolicy(r, v)
+	}
+
+	req, _ := http.NewRequest("GET", "http://"+addr.String()+"/redirect", nil)
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		t.Fatalf("1st request failed - %s", err.Error())
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("1st failed to read body - %s", err.Error())
+	}
+	httpClient.FinishRequest(req)
+
+	if numRedirects != 1 {
+		t.Fatalf("Did not correctly redirect with custom redirect policy", err.Error())
+	}
+
+	t.Logf("%s", body)
 }
 
 func TestHttpClient(t *testing.T) {

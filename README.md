@@ -12,8 +12,8 @@ package httpclient
 type HttpClient struct {
     ConnectTimeout   time.Duration
     ReadWriteTimeout time.Duration
-    MaxRedirects     int
     MaxConnsPerHost  int
+    RedirectPolicy   func(*http.Request, []*http.Request) error
 }
 
 func New() *HttpClient
@@ -42,6 +42,9 @@ func (h *HttpClient) RoundTrip(req *http.Request) (*http.Response, error)
     satisfies the RoundTripper interface and handles checking the connection
     cache or dialing (with ConnectTimeout)
 
+func DefaultRedirectPolicy(req *http.Request, via []*http.Request) error
+    default redirect policy which fails after 3 redirects.
+
 func Version() string
     returns the current version
 ```
@@ -63,6 +66,13 @@ func main() {
     httpClient := httpclient.New()
     httpClient.ConnectTimeout = time.Second
     httpClient.ReadWriteTimeout = time.Second
+
+    // Make a custom redirect policy to keep track of the number of redirects we've followed
+    var numRedirects int
+    httpClient.RedirectPolicy = func(r *http.Request, v []*http.Request) error {
+        numRedirects += 1
+        return DefaultRedirectPolicy(r, v)
+    }
 
     req, _ := http.NewRequest("GET", "http://127.0.0.1/test", nil)
 

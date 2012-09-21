@@ -14,7 +14,7 @@ import (
 
 // returns the current version
 func Version() string {
-	return "0.3.3"
+	return "0.3.4"
 }
 
 type connCache struct {
@@ -35,8 +35,8 @@ type HttpClient struct {
 	connMap          map[*http.Request]net.Conn
 	ConnectTimeout   time.Duration
 	ReadWriteTimeout time.Duration
-	MaxRedirects     int
 	MaxConnsPerHost  int
+	RedirectPolicy   func(*http.Request, []*http.Request) error
 }
 
 // create a new HttpClient
@@ -50,10 +50,11 @@ func New() *HttpClient {
 		ConnectTimeout:   5 * time.Second,
 		ReadWriteTimeout: 5 * time.Second,
 		MaxConnsPerHost:  5,
+		RedirectPolicy:   DefaultRedirectPolicy,
 	}
 
 	redirFunc := func(r *http.Request, v []*http.Request) error {
-		return h.redirectPolicy(r, v)
+		return h.RedirectPolicy(r, v)
 	}
 
 	transport := &http.Transport{}
@@ -65,9 +66,9 @@ func New() *HttpClient {
 	return h
 }
 
-func (h *HttpClient) redirectPolicy(req *http.Request, via []*http.Request) error {
-	if len(via) >= h.MaxRedirects {
-		return errors.New("stopped after 3 redirects")
+func DefaultRedirectPolicy(req *http.Request, via []*http.Request) error {
+	if len(via) > 3 {
+		return errors.New("Stopped after 3 redirects")
 	}
 	return nil
 }
