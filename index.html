@@ -40,8 +40,8 @@
 <span class="k">type</span> <span class="n">HttpClient</span> <span class="k">struct</span> <span class="p">{</span>
     <span class="n">ConnectTimeout</span>   <span class="n">time</span><span class="p">.</span><span class="n">Duration</span>
     <span class="n">ReadWriteTimeout</span> <span class="n">time</span><span class="p">.</span><span class="n">Duration</span>
-    <span class="n">MaxRedirects</span>     <span class="nb">int</span>
     <span class="n">MaxConnsPerHost</span>  <span class="nb">int</span>
+    <span class="n">RedirectPolicy</span>   <span class="k">func</span><span class="p">(*</span><span class="n">http</span><span class="p">.</span><span class="n">Request</span><span class="p">,</span> <span class="p">[]*</span><span class="n">http</span><span class="p">.</span><span class="n">Request</span><span class="p">)</span> <span class="n">error</span>
 <span class="p">}</span>
 
 <span class="k">func</span> <span class="n">New</span><span class="p">()</span> <span class="p">*</span><span class="n">HttpClient</span>
@@ -70,6 +70,9 @@
     <span class="n">satisfies</span> <span class="n">the</span> <span class="n">RoundTripper</span> <span class="k">interface</span> <span class="n">and</span> <span class="n">handles</span> <span class="n">checking</span> <span class="n">the</span> <span class="n">connection</span>
     <span class="n">cache</span> <span class="n">or</span> <span class="n">dialing</span> <span class="p">(</span><span class="n">with</span> <span class="n">ConnectTimeout</span><span class="p">)</span>
 
+<span class="k">func</span> <span class="n">DefaultRedirectPolicy</span><span class="p">(</span><span class="n">req</span> <span class="p">*</span><span class="n">http</span><span class="p">.</span><span class="n">Request</span><span class="p">,</span> <span class="n">via</span> <span class="p">[]*</span><span class="n">http</span><span class="p">.</span><span class="n">Request</span><span class="p">)</span> <span class="n">error</span>
+    <span class="k">default</span> <span class="n">redirect</span> <span class="n">policy</span> <span class="n">which</span> <span class="n">fails</span> <span class="n">after</span> <span class="mi">3</span> <span class="n">redirects</span><span class="p">.</span>
+
 <span class="k">func</span> <span class="n">Version</span><span class="p">()</span> <span class="nb">string</span>
     <span class="n">returns</span> <span class="n">the</span> <span class="n">current</span> <span class="n">version</span>
 </pre></div>
@@ -90,6 +93,13 @@
     <span class="n">httpClient</span> <span class="p">:=</span> <span class="n">httpclient</span><span class="p">.</span><span class="n">New</span><span class="p">()</span>
     <span class="n">httpClient</span><span class="p">.</span><span class="n">ConnectTimeout</span> <span class="p">=</span> <span class="n">time</span><span class="p">.</span><span class="n">Second</span>
     <span class="n">httpClient</span><span class="p">.</span><span class="n">ReadWriteTimeout</span> <span class="p">=</span> <span class="n">time</span><span class="p">.</span><span class="n">Second</span>
+
+    <span class="c1">// Make a custom redirect policy to keep track of the number of redirects we've followed</span>
+    <span class="k">var</span> <span class="n">numRedirects</span> <span class="nb">int</span>
+    <span class="n">httpClient</span><span class="p">.</span><span class="n">RedirectPolicy</span> <span class="p">=</span> <span class="k">func</span><span class="p">(</span><span class="n">r</span> <span class="p">*</span><span class="n">http</span><span class="p">.</span><span class="n">Request</span><span class="p">,</span> <span class="n">v</span> <span class="p">[]*</span><span class="n">http</span><span class="p">.</span><span class="n">Request</span><span class="p">)</span> <span class="n">error</span> <span class="p">{</span>
+        <span class="n">numRedirects</span> <span class="p">+=</span> <span class="mi">1</span>
+        <span class="k">return</span> <span class="n">DefaultRedirectPolicy</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span>
+    <span class="p">}</span>
 
     <span class="n">req</span><span class="p">,</span> <span class="n">_</span> <span class="p">:=</span> <span class="n">http</span><span class="p">.</span><span class="n">NewRequest</span><span class="p">(</span><span class="s">"GET"</span><span class="p">,</span> <span class="s">"http://127.0.0.1/test"</span><span class="p">,</span> <span class="n">nil</span><span class="p">)</span>
 
