@@ -47,6 +47,33 @@ func setupMockServer(t *testing.T) {
 	addr = ln.Addr()
 }
 
+func TestHttpsConnection(t *testing.T) {
+	httpClient := New()
+	httpClient.TLSClientConfig.InsecureSkipVerify = true
+
+	req, _ := http.NewRequest("GET", "https://httpbin.org/ip", nil)
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		t.Fatalf("1st request failed - %s", err.Error())
+	}
+	defer resp.Body.Close()
+	_, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("1st failed to read body - %s", err.Error())
+	}
+	httpClient.FinishRequest(req)
+
+	httpClient.ReadWriteTimeout = 20 * time.Millisecond
+	req2, _ := http.NewRequest("GET", "https://httpbin.org/delay/5", nil)
+
+	_, err = httpClient.Do(req)
+	if err == nil {
+		t.Fatalf("HTTPS request should have timed out")
+	}
+	httpClient.FinishRequest(req2)
+}
+
 func TestCustomRedirectPolicy(t *testing.T) {
 	starter.Do(func() { setupMockServer(t) })
 
