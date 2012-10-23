@@ -99,7 +99,3 @@ func main() {
     httpClient.FinishRequest(req)
 }
 ```
-
-#### TODO
-
- * HTTPS support

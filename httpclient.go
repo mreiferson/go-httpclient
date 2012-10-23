@@ -15,7 +15,7 @@ import (
 
 // returns the current version
 func Version() string {
-	return "0.3.4"
+	return "0.3.5"
 }
 
 type connCache struct {
@@ -28,7 +28,6 @@ type connCache struct {
 //    * set read/write timeout
 //    * easy access to the connection object for a given request
 //
-// TODO: https support
 type HttpClient struct {
 	sync.RWMutex
 	client           *http.Client
