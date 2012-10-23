@@ -2,8 +2,9 @@
 
 HttpClient wraps Go's built in HTTP client providing an API to:
 
- * set connect timeout
- * set read/write timeout
+ * set timeouts
+    * separate connect timeout
+    * *request* based timeout (*not* just read/write deadline)
  * easy access to the connection object for a given request
 
 ```go
