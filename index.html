@@ -32,8 +32,14 @@
 <p>HttpClient wraps Go's built in HTTP client providing an API to:</p>
 
 <ul>
-<li>set connect timeout</li>
-<li>set read/write timeout</li>
+<li>set timeouts
+
+<ul>
+<li>separate connect timeout</li>
+<li>
+<em>request</em> based timeout (*not* just read/write deadline)</li>
+</ul>
+</li>
 <li>easy access to the connection object for a given request</li>
 </ul><div class="highlight"><pre><span class="k">package</span> <span class="n">httpclient</span>
 
@@ -42,6 +48,7 @@
     <span class="n">ReadWriteTimeout</span> <span class="n">time</span><span class="p">.</span><span class="n">Duration</span>
     <span class="n">MaxConnsPerHost</span>  <span class="nb">int</span>
     <span class="n">RedirectPolicy</span>   <span class="k">func</span><span class="p">(*</span><span class="n">http</span><span class="p">.</span><span class="n">Request</span><span class="p">,</span> <span class="p">[]*</span><span class="n">http</span><span class="p">.</span><span class="n">Request</span><span class="p">)</span> <span class="n">error</span>
+    <span class="n">TLSClientConfig</span>  <span class="p">*</span><span class="n">tls</span><span class="p">.</span><span class="n">Config</span>
 <span class="p">}</span>
 
 <span class="k">func</span> <span class="n">New</span><span class="p">()</span> <span class="p">*</span><span class="n">HttpClient</span>
@@ -94,6 +101,10 @@
     <span class="n">httpClient</span><span class="p">.</span><span class="n">ConnectTimeout</span> <span class="p">=</span> <span class="n">time</span><span class="p">.</span><span class="n">Second</span>
     <span class="n">httpClient</span><span class="p">.</span><span class="n">ReadWriteTimeout</span> <span class="p">=</span> <span class="n">time</span><span class="p">.</span><span class="n">Second</span>
 
+    <span class="c1">// Allow insecure HTTPS connections.  Note: the TLSClientConfig pointer can't change</span>
+    <span class="c1">// places, so you can only modify the existing tls.Config object</span>
+    <span class="n">httpClient</span><span class="p">.</span><span class="n">TLSClientConfig</span><span class="p">.</span><span class="n">InsecureSkipVerify</span> <span class="p">=</span> <span class="n">true</span>
+
     <span class="c1">// Make a custom redirect policy to keep track of the number of redirects we've followed</span>
     <span class="k">var</span> <span class="n">numRedirects</span> <span class="nb">int</span>
     <span class="n">httpClient</span><span class="p">.</span><span class="n">RedirectPolicy</span> <span class="p">=</span> <span class="k">func</span><span class="p">(</span><span class="n">r</span> <span class="p">*</span><span class="n">http</span><span class="p">.</span><span class="n">Request</span><span class="p">,</span> <span class="n">v</span> <span class="p">[]*</span><span class="n">http</span><span class="p">.</span><span class="n">Request</span><span class="p">)</span> <span class="n">error</span> <span class="p">{</span>
@@ -121,12 +132,6 @@
     <span class="n">httpClient</span><span class="p">.</span><span class="n">FinishRequest</span><span class="p">(</span><span class="n">req</span><span class="p">)</span>
 <span class="p">}</span>
 </pre></div>
-
-<h4>TODO</h4>
-
-<ul>
-<li>HTTPS support</li>
-</ul>
       </section>
     </div>
     <footer>
