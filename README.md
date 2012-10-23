@@ -14,6 +14,7 @@ type HttpClient struct {
     ReadWriteTimeout time.Duration
     MaxConnsPerHost  int
     RedirectPolicy   func(*http.Request, []*http.Request) error
+    TLSClientConfig  *tls.Config
 }
 
 func New() *HttpClient
@@ -66,6 +67,10 @@ func main() {
     httpClient := httpclient.New()
     httpClient.ConnectTimeout = time.Second
     httpClient.ReadWriteTimeout = time.Second
+
+    // Allow insecure HTTPS connections.  Note: the TLSClientConfig pointer can't change
+    // places, so you can only modify the existing tls.Config object
+	httpClient.TLSClientConfig.InsecureSkipVerify = true
 
     // Make a custom redirect policy to keep track of the number of redirects we've followed
     var numRedirects int

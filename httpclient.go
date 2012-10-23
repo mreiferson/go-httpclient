@@ -3,6 +3,7 @@ package httpclient
 import (
 	"bufio"
 	"container/list"
+	"crypto/tls"
 	"errors"
 	"io"
 	"net"
@@ -37,6 +38,7 @@ type HttpClient struct {
 	ReadWriteTimeout time.Duration
 	MaxConnsPerHost  int
 	RedirectPolicy   func(*http.Request, []*http.Request) error
+	TLSClientConfig  *tls.Config
 }
 
 // create a new HttpClient
@@ -51,14 +53,18 @@ func New() *HttpClient {
 		ReadWriteTimeout: 5 * time.Second,
 		MaxConnsPerHost:  5,
 		RedirectPolicy:   DefaultRedirectPolicy,
+		TLSClientConfig:  &tls.Config{},
 	}
 
 	redirFunc := func(r *http.Request, v []*http.Request) error {
 		return h.RedirectPolicy(r, v)
 	}
 
-	transport := &http.Transport{}
+	transport := &http.Transport{
+		TLSClientConfig: h.TLSClientConfig,
+	}
 	transport.RegisterProtocol("hc_http", h)
+	transport.RegisterProtocol("hc_https", h)
 
 	client.CheckRedirect = redirFunc
 	client.Transport = transport
@@ -79,7 +85,7 @@ func (h *HttpClient) RoundTrip(req *http.Request) (*http.Response, error) {
 	var c net.Conn
 	var err error
 
-	addr := canonicalAddr(req.URL.Host)
+	addr := canonicalAddr(req.URL.Host, req.URL.Scheme)
 	c, err = h.checkConnCache(addr)
 	if err != nil {
 		return nil, err
@@ -89,6 +95,20 @@ func (h *HttpClient) RoundTrip(req *http.Request) (*http.Response, error) {
 		c, err = net.DialTimeout("tcp", addr, h.ConnectTimeout)
 		if err != nil {
 			return nil, err
+		}
+
+		if req.URL.Scheme == "hc_https" {
+			// Initiate TLS and check remote host name against certificate.
+			c = tls.Client(c, h.TLSClientConfig)
+			if err = c.(*tls.Conn).Handshake(); err != nil {
+				return nil, err
+			}
+			if h.TLSClientConfig == nil || !h.TLSClientConfig.InsecureSkipVerify {
+				hostname, _, _ := net.SplitHostPort(req.URL.Host) // Remove port from host
+				if err = c.(*tls.Conn).VerifyHostname(hostname); err != nil {
+					return nil, err
+				}
+			}
 		}
 	}
 
@@ -176,7 +196,9 @@ func (h *HttpClient) GetConn(req *http.Request) (net.Conn, error) {
 // perform the specified request
 func (h *HttpClient) Do(req *http.Request) (*http.Response, error) {
 	// h@x0r Go's http client to use our RoundTripper
-	req.URL.Scheme = "hc_http"
+	if !strings.HasPrefix(req.URL.Scheme, "hc_") {
+		req.URL.Scheme = "hc_" + req.URL.Scheme
+	}
 
 	resp, err := h.client.Do(req)
 	if err != nil || resp.Close || req.Close {
@@ -228,12 +250,16 @@ func (h *HttpClient) FinishRequest(req *http.Request) error {
 	delete(h.connMap, req)
 	h.Unlock()
 
-	return h.cacheConn(canonicalAddr(req.URL.Host), conn)
+	return h.cacheConn(canonicalAddr(req.URL.Host, req.URL.Scheme), conn)
 }
 
-func canonicalAddr(s string) string {
+func canonicalAddr(s string, scheme string) string {
 	if !hasPort(s) {
-		s = s + ":80"
+		if scheme == "hc_http" {
+			s = s + ":80"
+		} else if scheme == "hc_https" {
+			s = s + ":443"
+		}
 	}
 	return s
 }
