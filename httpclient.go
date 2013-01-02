@@ -56,7 +56,16 @@ func New() *HttpClient {
 	}
 
 	redirFunc := func(r *http.Request, v []*http.Request) error {
-		return h.RedirectPolicy(r, v)
+		lastRequest := v[len(v)-1]
+		if strings.HasPrefix(lastRequest.URL.Scheme, "hc_") {
+			lastRequest.URL.Scheme = lastRequest.URL.Scheme[3:]
+		}
+		if strings.HasPrefix(r.URL.Scheme, "hc_") {
+			r.URL.Scheme = r.URL.Scheme[3:]
+		}
+		resp := h.RedirectPolicy(r, v)
+		r.URL.Scheme = "hc_" + r.URL.Scheme
+		return resp
 	}
 
 	transport := &http.Transport{
@@ -213,6 +222,11 @@ func (h *HttpClient) Do(req *http.Request) (*http.Response, error) {
 		h.Unlock()
 	}
 
+	if resp != nil {
+		if strings.HasPrefix(resp.Request.URL.Scheme, "hc_") {
+			resp.Request.URL.Scheme = resp.Request.URL.Scheme[3:]
+		}
+	}
 	return resp, err
 }
 
