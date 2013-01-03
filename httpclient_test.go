@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -30,10 +31,16 @@ func redirectHandler(w http.ResponseWriter, req *http.Request) {
 	http.Redirect(w, req, "/post", 302)
 }
 
+func redirect2Handler(w http.ResponseWriter, req *http.Request) {
+	ioutil.ReadAll(req.Body)
+	http.Redirect(w, req, "/redirect", 302)
+}
+
 func setupMockServer(t *testing.T) {
 	http.HandleFunc("/test", testHandler)
 	http.HandleFunc("/post", postHandler)
 	http.HandleFunc("/redirect", redirectHandler)
+	http.HandleFunc("/redirect2", redirect2Handler)
 	ln, err := net.Listen("tcp", ":0")
 	if err != nil {
 		t.Fatalf("failed to listen - %s", err.Error())
@@ -78,18 +85,40 @@ func TestCustomRedirectPolicy(t *testing.T) {
 	starter.Do(func() { setupMockServer(t) })
 
 	httpClient := New()
-	numRedirects := 0
+	redirects := make(chan string, 3)
 	httpClient.RedirectPolicy = func(r *http.Request, v []*http.Request) error {
-		numRedirects += 1
+		if strings.HasPrefix(r.URL.Scheme, "hc_") {
+			t.Errorf("Stray hc_ in URL")
+		}
+		for _, i := range v {
+			if strings.HasPrefix(i.URL.Scheme, "hc_") {
+				t.Errorf("Stray hc_ in URL")
+			}
+		}
+		redirects <- v[len(v)-1].URL.String()
 		return DefaultRedirectPolicy(r, v)
 	}
 
-	req, _ := http.NewRequest("GET", "http://"+addr.String()+"/redirect", nil)
+	req, _ := http.NewRequest("GET", "http://"+addr.String()+"/redirect2", nil)
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		t.Fatalf("1st request failed - %s", err.Error())
 	}
+
+	urls := make([]string, 0, 3)
+	close(redirects)
+	for url := range redirects {
+		urls = append(urls, url)
+	}
+	urls = append(urls, resp.Request.URL.String())
+	t.Logf("%s", urls)
+	for _, url := range urls {
+		if strings.HasPrefix(url, "hc_") {
+			t.Errorf("Stray hc_ in URL")
+		}
+	}
+
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -97,7 +126,7 @@ func TestCustomRedirectPolicy(t *testing.T) {
 	}
 	httpClient.FinishRequest(req)
 
-	if numRedirects != 1 {
+	if len(urls) != 3 {
 		t.Fatalf("Did not correctly redirect with custom redirect policy", err.Error())
 	}
 
@@ -119,6 +148,11 @@ func TestHttpClient(t *testing.T) {
 		t.Fatalf("1st request failed - %s", err.Error())
 	}
 	defer resp.Body.Close()
+
+	if strings.HasPrefix(resp.Request.URL.Scheme, "hc_") {
+		t.Errorf("Stray hc_ in response")
+	}
+
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatalf("1st failed to read body - %s", err.Error())
