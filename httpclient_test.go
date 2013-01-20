@@ -26,6 +26,14 @@ func postHandler(w http.ResponseWriter, req *http.Request) {
 	io.WriteString(w, "OK")
 }
 
+func closeHandler(w http.ResponseWriter, req *http.Request) {
+	hj, _ := w.(http.Hijacker)
+	conn, bufrw, _ := hj.Hijack()
+	defer conn.Close()
+	bufrw.WriteString("HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n")
+	bufrw.Flush()
+}
+
 func redirectHandler(w http.ResponseWriter, req *http.Request) {
 	ioutil.ReadAll(req.Body)
 	http.Redirect(w, req, "/post", 302)
@@ -41,6 +49,7 @@ func setupMockServer(t *testing.T) {
 	http.HandleFunc("/post", postHandler)
 	http.HandleFunc("/redirect", redirectHandler)
 	http.HandleFunc("/redirect2", redirect2Handler)
+	http.HandleFunc("/close", closeHandler)
 	ln, err := net.Listen("tcp", ":0")
 	if err != nil {
 		t.Fatalf("failed to listen - %s", err.Error())
@@ -131,6 +140,37 @@ func TestCustomRedirectPolicy(t *testing.T) {
 	}
 
 	t.Logf("%s", body)
+}
+
+func TestClose(t *testing.T) {
+	starter.Do(func() { setupMockServer(t) })
+
+	httpClient := New()
+	req, _ := http.NewRequest("GET", "http://"+addr.String()+"/close", nil)
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		t.Fatalf("1st request failed - %s", err.Error())
+	}
+	_, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("1st failed to read body - %s", err.Error())
+	}
+	resp.Body.Close()
+	httpClient.FinishRequest(req)
+
+	req, _ = http.NewRequest("GET", "http://"+addr.String()+"/close", nil)
+
+	resp, err = httpClient.Do(req)
+	if err != nil {
+		t.Fatalf("2nd request failed - %s", err.Error())
+	}
+	_, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("2nd failed to read body - %s", err.Error())
+	}
+	resp.Body.Close()
+	httpClient.FinishRequest(req)
 }
 
 func TestHttpClient(t *testing.T) {
