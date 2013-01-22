@@ -15,7 +15,12 @@ import (
 
 // returns the current version
 func Version() string {
-	return "0.3.6"
+	return "0.3.7"
+}
+
+type cachedConn struct {
+	net.Conn
+	shouldClose bool
 }
 
 type connCache struct {
@@ -32,7 +37,7 @@ type HttpClient struct {
 	sync.RWMutex
 	client           *http.Client
 	cachedConns      map[string]*connCache
-	connMap          map[*http.Request]net.Conn
+	connMap          map[*http.Request]*cachedConn
 	ConnectTimeout   time.Duration
 	ReadWriteTimeout time.Duration
 	MaxConnsPerHost  int
@@ -47,7 +52,7 @@ func New() *HttpClient {
 	h := &HttpClient{
 		client:           client,
 		cachedConns:      make(map[string]*connCache),
-		connMap:          make(map[*http.Request]net.Conn),
+		connMap:          make(map[*http.Request]*cachedConn),
 		ConnectTimeout:   5 * time.Second,
 		ReadWriteTimeout: 5 * time.Second,
 		MaxConnsPerHost:  5,
@@ -121,7 +126,7 @@ func (h *HttpClient) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	h.Lock()
-	h.connMap[req] = c
+	h.connMap[req] = &cachedConn{Conn: c}
 	h.Unlock()
 
 	return h.exec(c, req)
@@ -142,7 +147,6 @@ func (h *HttpClient) checkConnCache(addr string) (net.Conn, error) {
 			c = e.Value.(net.Conn)
 		}
 	} else {
-
 		// this client hasnt seen this address before
 		cc = &connCache{
 			dl: list.New(),
@@ -214,14 +218,8 @@ func (h *HttpClient) Do(req *http.Request) (*http.Response, error) {
 		if conn == nil {
 			return resp, err
 		}
-
-		conn.Close()
-
-		h.Lock()
-		delete(h.connMap, req)
-		h.Unlock()
+		conn.(*cachedConn).shouldClose = true
 	}
-
 	if resp != nil {
 		if strings.HasPrefix(resp.Request.URL.Scheme, "hc_") {
 			resp.Request.URL.Scheme = resp.Request.URL.Scheme[3:]
@@ -262,6 +260,11 @@ func (h *HttpClient) FinishRequest(req *http.Request) error {
 	h.Lock()
 	delete(h.connMap, req)
 	h.Unlock()
+
+	if conn.(*cachedConn).shouldClose {
+		conn.Close()
+		return nil
+	}
 
 	return h.cacheConn(canonicalAddr(req.URL.Host, req.URL.Scheme), conn)
 }
