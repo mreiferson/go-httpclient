@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -15,7 +16,7 @@ import (
 
 // returns the current version
 func Version() string {
-	return "0.3.7"
+	return "0.3.8"
 }
 
 type cachedConn struct {
@@ -43,6 +44,7 @@ type HttpClient struct {
 	MaxConnsPerHost  int
 	RedirectPolicy   func(*http.Request, []*http.Request) error
 	TLSClientConfig  *tls.Config
+	Verbose          bool
 }
 
 // create a new HttpClient
@@ -99,12 +101,19 @@ func (h *HttpClient) RoundTrip(req *http.Request) (*http.Response, error) {
 	var err error
 
 	addr := canonicalAddr(req.URL.Host, req.URL.Scheme)
+
+	if h.Verbose {
+		log.Printf("DEBUG: checking cache for addr %s", addr)
+	}
 	c, err = h.checkConnCache(addr)
 	if err != nil {
 		return nil, err
 	}
 
 	if c == nil {
+		if h.Verbose {
+			log.Printf("DEBUG: addr not in cache, connecting...")
+		}
 		c, err = net.DialTimeout("tcp", addr, h.ConnectTimeout)
 		if err != nil {
 			return nil, err
@@ -218,6 +227,9 @@ func (h *HttpClient) Do(req *http.Request) (*http.Response, error) {
 		if conn == nil {
 			return resp, err
 		}
+		if h.Verbose {
+			log.Printf("DEBUG: setting close on %s, err: %s, resp.Close: %v, req.Close: %v", conn.RemoteAddr(), err, resp.Close, req.Close)
+		}
 		conn.(*cachedConn).shouldClose = true
 	}
 	if resp != nil {
@@ -262,18 +274,26 @@ func (h *HttpClient) FinishRequest(req *http.Request) error {
 	h.Unlock()
 
 	if conn.(*cachedConn).shouldClose {
+		if h.Verbose {
+			log.Printf("DEBUG: conn %s shouldClose, closing...", conn.RemoteAddr())
+		}
 		conn.Close()
 		return nil
 	}
 
-	return h.cacheConn(canonicalAddr(req.URL.Host, req.URL.Scheme), conn)
+	addr := canonicalAddr(req.URL.Host, req.URL.Scheme)
+	if h.Verbose {
+		log.Printf("DEBUG: caching conn %s as %s", conn.RemoteAddr(), addr)
+	}
+	return h.cacheConn(addr, conn)
 }
 
 func canonicalAddr(s string, scheme string) string {
 	if !hasPort(s) {
-		if scheme == "hc_http" {
+		switch scheme {
+		case "http", "hc_http":
 			s = s + ":80"
-		} else if scheme == "hc_https" {
+		case "https", "hc_https":
 			s = s + ":443"
 		}
 	}
