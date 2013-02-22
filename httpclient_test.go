@@ -245,3 +245,46 @@ func TestManyPosts(t *testing.T) {
 		httpClient.FinishRequest(req)
 	}
 }
+
+func TestConnectionCache(t *testing.T) {
+	starter.Do(func() { setupMockServer(t) })
+
+	httpClient := New()
+	if httpClient == nil {
+		t.Fatalf("failed to instantiate HttpClient")
+	}
+
+	req, _ := http.NewRequest("GET", "http://"+addr.String()+"/test", nil)
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		t.Fatalf("1st request failed - %s", err.Error())
+	}
+	resp.Body.Close()
+
+	if len(httpClient.connMap) != 1 {
+		t.Fatalf("connMap != 1")
+	}
+
+	httpClient.FinishRequest(req)
+
+	if len(httpClient.connMap) != 0 {
+		t.Fatalf("connMap != 0")
+	}
+
+	if httpClient.cachedConns[addr.String()].dl.Len() != 1 {
+		t.Fatalf("cachedConns != 1")
+	}
+
+	resp, err = httpClient.Do(req)
+	if err != nil {
+		t.Fatalf("1st request failed - %s", err.Error())
+	}
+	resp.Body.Close()
+
+	if httpClient.cachedConns[addr.String()].dl.Len() != 0 {
+		t.Fatalf("cachedConns != 0")
+	}
+
+	httpClient.FinishRequest(req)
+}
