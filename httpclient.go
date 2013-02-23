@@ -197,7 +197,14 @@ func (h *HttpClient) exec(conn net.Conn, req *http.Request) (*http.Response, err
 	}
 	bw.Flush()
 
-	return http.ReadResponse(br, req)
+	resp, err := http.ReadResponse(br, req)
+	if err != nil {
+		h.Lock()
+		delete(h.connMap, req)
+		h.Unlock()
+		conn.Close()
+	}
+	return resp, err
 }
 
 // returns the connection associated with the specified request
@@ -222,15 +229,12 @@ func (h *HttpClient) Do(req *http.Request) (*http.Response, error) {
 	}
 
 	resp, err := h.client.Do(req)
-	if err != nil || resp.Close || req.Close {
+	if err == nil && (resp.Close || req.Close) {
 		conn, _ := h.GetConn(req)
-		if conn == nil {
-			return resp, err
-		}
+		conn.(*cachedConn).shouldClose = true
 		if h.Verbose {
 			log.Printf("DEBUG: setting close on %s, err: %s, resp.Close: %v, req.Close: %v", conn.RemoteAddr(), err, resp.Close, req.Close)
 		}
-		conn.(*cachedConn).shouldClose = true
 	}
 	if resp != nil {
 		if strings.HasPrefix(resp.Request.URL.Scheme, "hc_") {
