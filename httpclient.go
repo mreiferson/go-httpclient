@@ -16,7 +16,7 @@ import (
 
 // returns the current version
 func Version() string {
-	return "0.3.8"
+	return "0.3.9"
 }
 
 type cachedConn struct {
