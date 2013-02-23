@@ -289,7 +289,7 @@ func (h *HttpClient) FinishRequest(req *http.Request) error {
 	if h.Verbose {
 		log.Printf("DEBUG: caching conn %s as %s", conn.RemoteAddr(), addr)
 	}
-	return h.cacheConn(addr, conn)
+	return h.cacheConn(addr, conn.(*cachedConn).Conn)
 }
 
 func canonicalAddr(s string, scheme string) string {
