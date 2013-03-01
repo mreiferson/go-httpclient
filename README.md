@@ -30,15 +30,9 @@ func (h *HttpClient) FinishRequest(req *http.Request) error
     every request performed after processing is finished and after which
     GetConn will no longer return successfully
 
-func (h *HttpClient) Get(url string) (*http.Response, error)
-    convenience method to perform a HTTP GET request
-
 func (h *HttpClient) GetConn(req *http.Request) (net.Conn, error)
     returns the connection associated with the specified request cannot be
     called after FinishRequest
-
-func (h *HttpClient) Post(url string, contentType string, body io.Reader) (*http.Response, error)
-    convenience method to perform a HTTP POST request
 
 func (h *HttpClient) RoundTrip(req *http.Request) (*http.Response, error)
     satisfies the RoundTripper interface and handles checking the connection

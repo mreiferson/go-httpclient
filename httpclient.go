@@ -5,7 +5,6 @@ import (
 	"container/list"
 	"crypto/tls"
 	"errors"
-	"io"
 	"log"
 	"net"
 	"net/http"
@@ -242,25 +241,6 @@ func (h *HttpClient) Do(req *http.Request) (*http.Response, error) {
 		}
 	}
 	return resp, err
-}
-
-// convenience method to perform a HTTP GET request
-func (h *HttpClient) Get(url string) (*http.Response, error) {
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-	return h.Do(req)
-}
-
-// convenience method to perform a HTTP POST request
-func (h *HttpClient) Post(url string, contentType string, body io.Reader) (*http.Response, error) {
-	req, err := http.NewRequest("POST", url, body)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", contentType)
-	return h.Do(req)
 }
 
 // perform final cleanup for the specified request
