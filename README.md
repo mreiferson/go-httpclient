@@ -1,96 +1,40 @@
-## HttpClient
+## go-httpclient
 
-HttpClient wraps Go's built in HTTP client providing an API to:
+NOTE: **Requires Go 1.1+** - as of `0.4.0` the API has been completely re-written for Go 1.1 (for Go 1.0.x compatible release see the
+[go1](https://github.com/mreiferson/go-httpclient/tree/go1) tag)
 
- * set timeouts
-    * separate connect timeout
-    * *request* based timeout (*not* just read/write deadline)
- * easy access to the connection object for a given request
+[![Build
+Status](https://secure.travis-ci.org/mreiferson/go-httpclient.png)](http://travis-ci.org/mreiferson/go-httpclient)
 
-```go
-package httpclient
+Provides an HTTP Transport that implements the `RoundTripper` interface and
+can be used as a built in replacement for the standard library's, providing:
 
-type HttpClient struct {
-    ConnectTimeout   time.Duration
-    ReadWriteTimeout time.Duration
-    MaxConnsPerHost  int
-    RedirectPolicy   func(*http.Request, []*http.Request) error
-    TLSClientConfig  *tls.Config
-}
+ * connection timeouts
+ * request timeouts
 
-func New() *HttpClient
-    create a new HttpClient all options should be set on the instance
-    returned
+Internally, it uses a priority queue maintained in a single goroutine
+(per *client* instance), leveraging the Go 1.1+ `CancelRequest()` API.
 
-func (h *HttpClient) Do(req *http.Request) (*http.Response, error)
-    perform the specified request
 
-func (h *HttpClient) FinishRequest(req *http.Request) error
-    perform final cleanup for the specified request *must* be called for
-    every request performed after processing is finished and after which
-    GetConn will no longer return successfully
-
-func (h *HttpClient) GetConn(req *http.Request) (net.Conn, error)
-    returns the connection associated with the specified request cannot be
-    called after FinishRequest
-
-func (h *HttpClient) RoundTrip(req *http.Request) (*http.Response, error)
-    satisfies the RoundTripper interface and handles checking the connection
-    cache or dialing (with ConnectTimeout)
-
-func DefaultRedirectPolicy(req *http.Request, via []*http.Request) error
-    default redirect policy which fails after 3 redirects.
-
-func Version() string
-    returns the current version
-```
-
-#### Example
+### Example
 
 ```go
-package main
-
-import (
-    "httpclient"
-    "io/ioutil"
-    "log"
-    "net/http"
-    "time"
-)
-
-func main() {
-    httpClient := httpclient.New()
-    httpClient.ConnectTimeout = time.Second
-    httpClient.ReadWriteTimeout = time.Second
-
-    // Allow insecure HTTPS connections.  Note: the TLSClientConfig pointer can't change
-    // places, so you can only modify the existing tls.Config object
-	httpClient.TLSClientConfig.InsecureSkipVerify = true
-
-    // Make a custom redirect policy to keep track of the number of redirects we've followed
-    var numRedirects int
-    httpClient.RedirectPolicy = func(r *http.Request, v []*http.Request) error {
-        numRedirects += 1
-        return DefaultRedirectPolicy(r, v)
-    }
-
-    req, _ := http.NewRequest("GET", "http://127.0.0.1/test", nil)
-
-    resp, err := httpClient.Do(req)
-    if err != nil {
-        log.Fatalf("request failed - %s", err.Error())
-    }
-    defer resp.Body.Close()
-
-    conn, err := httpClient.GetConn(req)
-    if err != nil {
-        log.Fatalf("failed to get conn for req")
-    }
-    // do something with conn
-
-    body, err := ioutil.ReadAll(resp.Body)
-    log.Printf("%s", body)
-
-    httpClient.FinishRequest(req)
+transport := &httpclient.Transport{
+    ConnectTimeout:        1*time.Second,
+    RequestTimeout:        10*time.Second,
+    ResponseHeaderTimeout: 5*time.Second,
 }
+defer transport.Close()
+
+client := &http.Client{Transport: transport}
+req, _ := http.NewRequest("GET", "http://127.0.0.1/test", nil)
+resp, err := client.Do(req)
+if err != nil {
+    return err
+}
+defer resp.Body.Close()
 ```
+
+### Reference Docs
+
+For API docs see [godoc](http://godoc.org/github.com/mreiferson/go-httpclient).
