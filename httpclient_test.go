@@ -1,12 +1,11 @@
 package httpclient
 
 import (
-	"bytes"
+	"crypto/tls"
 	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -64,227 +63,79 @@ func setupMockServer(t *testing.T) {
 }
 
 func TestHttpsConnection(t *testing.T) {
-	httpClient := New()
-	httpClient.TLSClientConfig.InsecureSkipVerify = true
+	transport := &Transport{
+		ConnectTimeout: 1 * time.Second,
+		RequestTimeout: 2 * time.Second,
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}
+	defer transport.Close()
+	client := &http.Client{Transport: transport}
 
 	req, _ := http.NewRequest("GET", "https://httpbin.org/ip", nil)
-
-	resp, err := httpClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("1st request failed - %s", err.Error())
 	}
-	defer resp.Body.Close()
 	_, err = ioutil.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatalf("1st failed to read body - %s", err.Error())
 	}
-	httpClient.FinishRequest(req)
+	resp.Body.Close()
 
-	httpClient.ReadWriteTimeout = 20 * time.Millisecond
 	req2, _ := http.NewRequest("GET", "https://httpbin.org/delay/5", nil)
-
-	_, err = httpClient.Do(req)
+	_, err = client.Do(req2)
 	if err == nil {
 		t.Fatalf("HTTPS request should have timed out")
 	}
-	httpClient.FinishRequest(req2)
-}
-
-func TestCustomRedirectPolicy(t *testing.T) {
-	starter.Do(func() { setupMockServer(t) })
-
-	httpClient := New()
-	redirects := make(chan string, 3)
-	httpClient.RedirectPolicy = func(r *http.Request, v []*http.Request) error {
-		if strings.HasPrefix(r.URL.Scheme, "hc_") {
-			t.Errorf("Stray hc_ in URL")
-		}
-		for _, i := range v {
-			if strings.HasPrefix(i.URL.Scheme, "hc_") {
-				t.Errorf("Stray hc_ in URL")
-			}
-		}
-		redirects <- v[len(v)-1].URL.String()
-		return DefaultRedirectPolicy(r, v)
-	}
-
-	req, _ := http.NewRequest("GET", "http://"+addr.String()+"/redirect2", nil)
-
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		t.Fatalf("1st request failed - %s", err.Error())
-	}
-
-	urls := make([]string, 0, 3)
-	close(redirects)
-	for url := range redirects {
-		urls = append(urls, url)
-	}
-	urls = append(urls, resp.Request.URL.String())
-	t.Logf("%s", urls)
-	for _, url := range urls {
-		if strings.HasPrefix(url, "hc_") {
-			t.Errorf("Stray hc_ in URL")
-		}
-	}
-
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("1st failed to read body - %s", err.Error())
-	}
-	httpClient.FinishRequest(req)
-
-	if len(urls) != 3 {
-		t.Fatalf("Did not correctly redirect with custom redirect policy", err.Error())
-	}
-
-	t.Logf("%s", body)
-}
-
-func TestClose(t *testing.T) {
-	starter.Do(func() { setupMockServer(t) })
-
-	httpClient := New()
-	req, _ := http.NewRequest("GET", "http://"+addr.String()+"/close", nil)
-
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		t.Fatalf("1st request failed - %s", err.Error())
-	}
-	_, err = ioutil.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("1st failed to read body - %s", err.Error())
-	}
-	resp.Body.Close()
-	httpClient.FinishRequest(req)
-
-	req, _ = http.NewRequest("GET", "http://"+addr.String()+"/close", nil)
-
-	resp, err = httpClient.Do(req)
-	if err != nil {
-		t.Fatalf("2nd request failed - %s", err.Error())
-	}
-	_, err = ioutil.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("2nd failed to read body - %s", err.Error())
-	}
-	resp.Body.Close()
-	httpClient.FinishRequest(req)
 }
 
 func TestHttpClient(t *testing.T) {
 	starter.Do(func() { setupMockServer(t) })
 
-	httpClient := New()
-	if httpClient == nil {
-		t.Fatalf("failed to instantiate HttpClient")
+	transport := &Transport{
+		ConnectTimeout: 1 * time.Second,
+		RequestTimeout: 5 * time.Second,
 	}
+	client := &http.Client{Transport: transport}
 
 	req, _ := http.NewRequest("GET", "http://"+addr.String()+"/test", nil)
-
-	resp, err := httpClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("1st request failed - %s", err.Error())
 	}
-	defer resp.Body.Close()
-
-	if strings.HasPrefix(resp.Request.URL.Scheme, "hc_") {
-		t.Errorf("Stray hc_ in response")
-	}
-
-	body, err := ioutil.ReadAll(resp.Body)
+	_, err = ioutil.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatalf("1st failed to read body - %s", err.Error())
 	}
-	t.Logf("%s", body)
-	httpClient.FinishRequest(req)
+	resp.Body.Close()
+	transport.Close()
 
-	httpClient.ReadWriteTimeout = 50 * time.Millisecond
-	resp, err = httpClient.Do(req)
+	transport = &Transport{
+		ConnectTimeout: 25 * time.Millisecond,
+		RequestTimeout: 50 * time.Millisecond,
+	}
+	client = &http.Client{Transport: transport}
+
+	req2, _ := http.NewRequest("GET", "http://"+addr.String()+"/test", nil)
+	resp, err = client.Do(req2)
 	if err == nil {
 		t.Fatalf("2nd request should have timed out")
 	}
-	httpClient.FinishRequest(req)
+	transport.Close()
 
-	httpClient.ReadWriteTimeout = 250 * time.Millisecond
-	resp, err = httpClient.Do(req)
+	transport = &Transport{
+		ConnectTimeout: 25 * time.Millisecond,
+		RequestTimeout: 250 * time.Millisecond,
+	}
+	client = &http.Client{Transport: transport}
+
+	req3, _ := http.NewRequest("GET", "http://"+addr.String()+"/test", nil)
+	resp, err = client.Do(req3)
 	if err != nil {
 		t.Fatalf("3nd request should not have timed out")
 	}
-	httpClient.FinishRequest(req)
-}
-
-func TestManyPosts(t *testing.T) {
-	starter.Do(func() { setupMockServer(t) })
-
-	httpClient := New()
-	if httpClient == nil {
-		t.Fatalf("failed to instantiate HttpClient")
-	}
-
-	data := ""
-	for i := 0; i < 100; i++ {
-		data = data + "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	}
-	data = data + "\n"
-
-	for i := 0; i < 10000; i++ {
-		buffer := bytes.NewBuffer([]byte(data))
-		req, _ := http.NewRequest("POST", "http://"+addr.String()+"/post", buffer)
-
-		resp, err := httpClient.Do(req)
-		if err != nil {
-			t.Fatalf("%d post request failed - %s", i, err.Error())
-		}
-		_, err = ioutil.ReadAll(resp.Body)
-		if err != nil {
-			t.Fatalf("%d failed to read body - %s", i, err.Error())
-		}
-		resp.Body.Close()
-		httpClient.FinishRequest(req)
-	}
-}
-
-func TestConnectionCache(t *testing.T) {
-	starter.Do(func() { setupMockServer(t) })
-
-	httpClient := New()
-	if httpClient == nil {
-		t.Fatalf("failed to instantiate HttpClient")
-	}
-
-	req, _ := http.NewRequest("GET", "http://"+addr.String()+"/test", nil)
-
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		t.Fatalf("1st request failed - %s", err.Error())
-	}
 	resp.Body.Close()
-
-	if len(httpClient.connMap) != 1 {
-		t.Fatalf("connMap != 1")
-	}
-
-	httpClient.FinishRequest(req)
-
-	if len(httpClient.connMap) != 0 {
-		t.Fatalf("connMap != 0")
-	}
-
-	if httpClient.cachedConns[addr.String()].dl.Len() != 1 {
-		t.Fatalf("cachedConns != 1")
-	}
-
-	resp, err = httpClient.Do(req)
-	if err != nil {
-		t.Fatalf("1st request failed - %s", err.Error())
-	}
-	resp.Body.Close()
-
-	if httpClient.cachedConns[addr.String()].dl.Len() != 0 {
-		t.Fatalf("cachedConns != 0")
-	}
-
-	httpClient.FinishRequest(req)
+	transport.Close()
 }
