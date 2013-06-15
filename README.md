@@ -1,7 +1,7 @@
 ## go-httpclient
 
-NOTE: **Requires Go 1.1+** - as of `0.4.0` the API has been completely re-written for Go 1.1 (for Go 1.0.x compatible release see the
-[go1](https://github.com/mreiferson/go-httpclient/tree/go1) tag)
+**requires Go 1.1+** as of `v0.4.0` the API has been completely re-written for Go 1.1 (for a Go
+1.0.x compatible release see the [go1](https://github.com/mreiferson/go-httpclient/tree/go1) tag)
 
 [![Build
 Status](https://secure.travis-ci.org/mreiferson/go-httpclient.png)](http://travis-ci.org/mreiferson/go-httpclient)
@@ -14,7 +14,6 @@ can be used as a built in replacement for the standard library's, providing:
 
 Internally, it uses a priority queue maintained in a single goroutine
 (per *client* instance), leveraging the Go 1.1+ `CancelRequest()` API.
-
 
 ### Example
 

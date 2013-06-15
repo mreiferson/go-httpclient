@@ -139,3 +139,28 @@ func TestHttpClient(t *testing.T) {
 	resp.Body.Close()
 	transport.Close()
 }
+
+func TestMultipleRequests(t *testing.T) {
+	starter.Do(func() { setupMockServer(t) })
+
+	transport := &Transport{
+		ConnectTimeout: 1 * time.Second,
+		RequestTimeout: 5 * time.Second,
+		ResponseHeaderTimeout: 10 * time.Millisecond,
+	}
+	client := &http.Client{Transport: transport}
+
+	req, _ := http.NewRequest("GET", "http://"+addr.String()+"/test", nil)
+	for i := 0; i < 10; i++ {
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("%d request failed - %s", i, err.Error())
+		}
+		_, err = ioutil.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("%d failed to read body - %s", i, err.Error())
+		}
+		resp.Body.Close()
+	}
+	transport.Close()
+}
