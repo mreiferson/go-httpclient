@@ -4,7 +4,7 @@
 1.0.x compatible release see the [go1](https://github.com/mreiferson/go-httpclient/tree/go1) tag)
 
 [![Build
-Status](https://secure.travis-ci.org/mreiferson/go-httpclient.png)](http://travis-ci.org/mreiferson/go-httpclient)
+Status](https://secure.travis-ci.org/mreiferson/go-httpclient.png?branch=master)](http://travis-ci.org/mreiferson/go-httpclient)
 
 Provides an HTTP Transport that implements the `RoundTripper` interface and
 can be used as a built in replacement for the standard library's, providing:
