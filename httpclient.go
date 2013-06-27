@@ -2,8 +2,8 @@
 Provides an HTTP Transport that implements the `RoundTripper` interface and
 can be used as a built in replacement for the standard library's, providing:
 
- * connection timeouts
- * request timeouts
+	* connection timeouts
+	* request timeouts
 
 Internally, it uses a priority queue maintained in a single goroutine
 (per *client* instance), leveraging the Go 1.1+ `CancelRequest()` API.
@@ -30,20 +30,20 @@ func Version() string {
 // Transport implements the RoundTripper interface and can be used as a replacement
 // for Go's built in http.Transport implementing end-to-end request timeouts.
 //
-// transport := &httpclient.Transport{
-//     ConnectTimeout: 1*time.Second,
-//     ResponseHeaderTimeout: 5*time.Second,
-//     RequestTimeout: 10*time.Second,
-// }
-// defer transport.Close()
-//
-// client := &http.Client{Transport: transport}
-// req, _ := http.NewRequest("GET", "http://127.0.0.1/test", nil)
-// resp, err := client.Do(req)
-// if err != nil {
-//     return err
-// }
-// defer resp.Body.Close()
+// 	transport := &httpclient.Transport{
+// 	    ConnectTimeout: 1*time.Second,
+// 	    ResponseHeaderTimeout: 5*time.Second,
+// 	    RequestTimeout: 10*time.Second,
+// 	}
+// 	defer transport.Close()
+// 	
+// 	client := &http.Client{Transport: transport}
+// 	req, _ := http.NewRequest("GET", "http://127.0.0.1/test", nil)
+// 	resp, err := client.Do(req)
+// 	if err != nil {
+// 	    return err
+// 	}
+// 	defer resp.Body.Close()
 //
 type Transport struct {
 	sync.Mutex
