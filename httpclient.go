@@ -5,8 +5,8 @@ can be used as a built in replacement for the standard library's, providing:
 	* connection timeouts
 	* request timeouts
 
-Internally, it uses a priority queue maintained in a single goroutine
-(per *client* instance), leveraging the Go 1.1+ `CancelRequest()` API.
+This is thin wrapper around http.Transport which set dial timeout and uses
+time.AfterFunc to call the Go 1.1+ `CancelRequest()` API.
 */
 package httpclient
 
