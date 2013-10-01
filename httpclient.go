@@ -11,9 +11,7 @@ Internally, it uses a priority queue maintained in a single goroutine
 package httpclient
 
 import (
-	"container/heap"
 	"crypto/tls"
-	"github.com/mreiferson/go-httpclient/pqueue"
 	"io"
 	"net"
 	"net/http"
@@ -46,8 +44,6 @@ func Version() string {
 // 	defer resp.Body.Close()
 //
 type Transport struct {
-	sync.Mutex
-
 	// Proxy specifies a function to return a proxy for a given
 	// *http.Request. If the function returns a non-nil error, the
 	// request is aborted with the provided error.
@@ -94,16 +90,10 @@ type Transport struct {
 
 	starter   sync.Once
 	transport *http.Transport
-	requests  pqueue.PriorityQueue
-	exitChan  chan int
 }
 
 // Close cleans up the Transport, making sure its goroutine has exited
 func (t *Transport) Close() error {
-	if t.exitChan != nil {
-		t.exitChan <- 1
-		<-t.exitChan
-	}
 	return nil
 }
 
@@ -118,77 +108,35 @@ func (t *Transport) lazyStart() {
 		MaxIdleConnsPerHost:   t.MaxIdleConnsPerHost,
 		ResponseHeaderTimeout: t.ResponseHeaderTimeout,
 	}
-	t.requests = pqueue.New(16)
-	if t.RequestTimeout > 0 {
-		t.exitChan = make(chan int)
-		go t.worker()
-	}
 }
 
-func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
-	var item *pqueue.Item
-
+func (t *Transport) RoundTrip(req *http.Request) (resp *http.Response, err error) {
 	t.starter.Do(t.lazyStart)
 
-	absTs := time.Now().Add(t.RequestTimeout).UnixNano()
-	item = &pqueue.Item{Value: req, Priority: absTs}
-	t.Lock()
-	heap.Push(&t.requests, item)
-	t.Unlock()
-
-	resp, err := t.transport.RoundTrip(req)
-	if err != nil {
-		t.Lock()
-		if item.Index != -1 {
-			heap.Remove(&t.requests, item.Index)
-		}
-		t.Unlock()
-		return nil, err
-	}
-	resp.Body = &bodyCloseInterceptor{ReadCloser: resp.Body, item: item, t: t}
-
-	return resp, nil
-}
-
-func (t *Transport) worker() {
-	ticker := time.NewTicker(25 * time.Millisecond)
-	for {
-		select {
-		case <-ticker.C:
-		case <-t.exitChan:
-			goto exit
-		}
-		now := time.Now().UnixNano()
-		for {
-			t.Lock()
-			item, _ := t.requests.PeekAndShift(now)
-			t.Unlock()
-
-			if item == nil {
-				break
-			}
-
-			req := item.Value.(*http.Request)
+	if t.RequestTimeout > 0 {
+		timer := time.AfterFunc(t.RequestTimeout, func() {
 			t.transport.CancelRequest(req)
+		})
+
+		resp, err = t.transport.RoundTrip(req)
+		if err != nil {
+			timer.Stop()
+		} else {
+			resp.Body = &bodyCloseInterceptor{ReadCloser: resp.Body, timer: timer}
 		}
+	} else {
+		resp, err = t.transport.RoundTrip(req)
 	}
-exit:
-	ticker.Stop()
-	close(t.exitChan)
+
+	return
 }
 
 type bodyCloseInterceptor struct {
 	io.ReadCloser
-	item *pqueue.Item
-	t    *Transport
+	timer *time.Timer
 }
 
 func (bci *bodyCloseInterceptor) Close() error {
-	err := bci.ReadCloser.Close()
-	bci.t.Lock()
-	if bci.item.Index != -1 {
-		heap.Remove(&bci.t.requests, bci.item.Index)
-	}
-	bci.t.Unlock()
-	return err
+	bci.timer.Stop()
+	return bci.ReadCloser.Close()
 }
