@@ -12,8 +12,8 @@ can be used as a built in replacement for the standard library's, providing:
  * connection timeouts
  * request timeouts
 
-This is thin wrapper around http.Transport which set dial timeout and uses
-time.AfterFunc to call the Go 1.1+ `CancelRequest()` API.
+This is a thin wrapper around `http.Transport` that sets dial timeouts and uses
+Go's internal timer scheduler to call the Go 1.1+ `CancelRequest()` API.
 
 ### Example
 

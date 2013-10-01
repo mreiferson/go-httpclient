@@ -5,8 +5,8 @@ can be used as a built in replacement for the standard library's, providing:
 	* connection timeouts
 	* request timeouts
 
-This is thin wrapper around http.Transport which set dial timeout and uses
-time.AfterFunc to call the Go 1.1+ `CancelRequest()` API.
+This is a thin wrapper around `http.Transport` that sets dial timeouts and uses
+Go's internal timer scheduler to call the Go 1.1+ `CancelRequest()` API.
 */
 package httpclient
 
@@ -22,7 +22,7 @@ import (
 
 // returns the current version of the package
 func Version() string {
-	return "0.4.0"
+	return "0.4.1"
 }
 
 // Transport implements the RoundTripper interface and can be used as a replacement
@@ -92,7 +92,7 @@ type Transport struct {
 	transport *http.Transport
 }
 
-// Close cleans up the Transport, making sure its goroutine has exited
+// Close cleans up the Transport, currently a no-op
 func (t *Transport) Close() error {
 	return nil
 }
