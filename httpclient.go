@@ -110,12 +110,13 @@ func (t *Transport) Close() error {
 func (t *Transport) lazyStart() {
 	dialer := &net.Dialer{Timeout: t.ConnectTimeout}
 	t.transport = &http.Transport{
-		Dial:                dialer.Dial,
-		Proxy:               t.Proxy,
-		TLSClientConfig:     t.TLSClientConfig,
-		DisableKeepAlives:   t.DisableKeepAlives,
-		DisableCompression:  t.DisableCompression,
-		MaxIdleConnsPerHost: t.MaxIdleConnsPerHost,
+		Dial:                  dialer.Dial,
+		Proxy:                 t.Proxy,
+		TLSClientConfig:       t.TLSClientConfig,
+		DisableKeepAlives:     t.DisableKeepAlives,
+		DisableCompression:    t.DisableCompression,
+		MaxIdleConnsPerHost:   t.MaxIdleConnsPerHost,
+		ResponseHeaderTimeout: t.ResponseHeaderTimeout,
 	}
 	t.requests = pqueue.New(16)
 	if t.RequestTimeout > 0 {
