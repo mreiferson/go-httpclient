@@ -32,7 +32,7 @@
 <a name="go-httpclient" class="anchor" href="#go-httpclient"><span class="octicon octicon-link"></span></a>go-httpclient</h2>
 
 <p><strong>requires Go 1.1+</strong> as of <code>v0.4.0</code> the API has been completely re-written for Go 1.1 (for a Go
-1.0.x compatible release see <a href="https://github.com/mreiferson/go-httpclient/tree/357c1f8">357c1f8</a>)</p>
+1.0.x compatible release see <a href="https://github.com/mreiferson/go-httpclient/tree/1adef50">1adef50</a>)</p>
 
 <p><a href="http://travis-ci.org/mreiferson/go-httpclient"><img src="https://secure.travis-ci.org/mreiferson/go-httpclient.png?branch=master" alt="Build
 Status"></a></p>
@@ -43,13 +43,13 @@ can be used as a built in replacement for the standard library's, providing:</p>
 <ul>
 <li>connection timeouts</li>
 <li>request timeouts</li>
-</ul><p>Internally, it uses a priority queue maintained in a single goroutine
-(per <em>client</em> instance), leveraging the Go 1.1+ <code>CancelRequest()</code> API.</p>
+</ul><p>This is a thin wrapper around <code>http.Transport</code> that sets dial timeouts and uses
+Go's internal timer scheduler to call the Go 1.1+ <code>CancelRequest()</code> API.</p>
 
 <h3>
 <a name="example" class="anchor" href="#example"><span class="octicon octicon-link"></span></a>Example</h3>
 
-<div class="highlight"><pre><span class="nx">transport</span> <span class="o">:=</span> <span class="o">&amp;</span><span class="nx">httpclient</span><span class="p">.</span><span class="nx">Transport</span><span class="p">{</span>
+<div class="highlight highlight-go"><pre><span class="nx">transport</span> <span class="o">:=</span> <span class="o">&amp;</span><span class="nx">httpclient</span><span class="p">.</span><span class="nx">Transport</span><span class="p">{</span>
     <span class="nx">ConnectTimeout</span><span class="p">:</span>        <span class="mi">1</span><span class="o">*</span><span class="nx">time</span><span class="p">.</span><span class="nx">Second</span><span class="p">,</span>
     <span class="nx">RequestTimeout</span><span class="p">:</span>        <span class="mi">10</span><span class="o">*</span><span class="nx">time</span><span class="p">.</span><span class="nx">Second</span><span class="p">,</span>
     <span class="nx">ResponseHeaderTimeout</span><span class="p">:</span> <span class="mi">5</span><span class="o">*</span><span class="nx">time</span><span class="p">.</span><span class="nx">Second</span><span class="p">,</span>
