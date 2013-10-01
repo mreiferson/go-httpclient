@@ -144,9 +144,9 @@ func TestMultipleRequests(t *testing.T) {
 	starter.Do(func() { setupMockServer(t) })
 
 	transport := &Transport{
-		ConnectTimeout: 1 * time.Second,
-		RequestTimeout: 5 * time.Second,
-		ResponseHeaderTimeout: 10 * time.Millisecond,
+		ConnectTimeout:        1 * time.Second,
+		RequestTimeout:        5 * time.Second,
+		ResponseHeaderTimeout: 400 * time.Millisecond,
 	}
 	client := &http.Client{Transport: transport}
 
