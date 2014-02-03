@@ -34,7 +34,7 @@ func Version() string {
 // 	    RequestTimeout: 10*time.Second,
 // 	}
 // 	defer transport.Close()
-// 	
+//
 // 	client := &http.Client{Transport: transport}
 // 	req, _ := http.NewRequest("GET", "http://127.0.0.1/test", nil)
 // 	resp, err := client.Do(req)
@@ -49,6 +49,13 @@ type Transport struct {
 	// request is aborted with the provided error.
 	// If Proxy is nil or returns a nil *url.URL, no proxy is used.
 	Proxy func(*http.Request) (*url.URL, error)
+
+	// Dial specifies the dial function for creating TCP
+	// connections. This will override the Transport's ConnectTimeout and
+	// ReadWriteTimeout settings.
+	// If Dial is nil, a dialer is generated on demand matching the Transport's
+	// options.
+	Dial func(network, addr string) (net.Conn, error)
 
 	// TLSClientConfig specifies the TLS configuration to use with
 	// tls.Client. If nil, the default configuration is used.
@@ -88,6 +95,10 @@ type Transport struct {
 	// This should never be less than the sum total of the above two timeouts.
 	RequestTimeout time.Duration
 
+	// ReadWriteTimeout, if non-zero, will set a deadline for every Read and
+	// Write operation on the request connection.
+	ReadWriteTimeout time.Duration
+
 	starter   sync.Once
 	transport *http.Transport
 }
@@ -98,9 +109,26 @@ func (t *Transport) Close() error {
 }
 
 func (t *Transport) lazyStart() {
-	dialer := &net.Dialer{Timeout: t.ConnectTimeout}
+	if t.Dial == nil {
+		t.Dial = func(netw, addr string) (net.Conn, error) {
+			c, err := net.DialTimeout(netw, addr, t.ConnectTimeout)
+			if err != nil {
+				return nil, err
+			}
+
+			if t.ReadWriteTimeout > 0 {
+				timeoutConn := &rwTimeoutConn{
+					Conn:      c,
+					rwTimeout: t.ReadWriteTimeout,
+				}
+				return timeoutConn, nil
+			}
+			return c, nil
+		}
+	}
+
 	t.transport = &http.Transport{
-		Dial:                  dialer.Dial,
+		Dial:                  t.Dial,
 		Proxy:                 t.Proxy,
 		TLSClientConfig:       t.TLSClientConfig,
 		DisableKeepAlives:     t.DisableKeepAlives,
@@ -139,4 +167,26 @@ type bodyCloseInterceptor struct {
 func (bci *bodyCloseInterceptor) Close() error {
 	bci.timer.Stop()
 	return bci.ReadCloser.Close()
+}
+
+// A net.Conn that sets a deadline for every Read or Write operation
+type rwTimeoutConn struct {
+	net.Conn
+	rwTimeout time.Duration
+}
+
+func (c *rwTimeoutConn) Read(b []byte) (int, error) {
+	err := c.Conn.SetReadDeadline(time.Now().Add(c.rwTimeout))
+	if err != nil {
+		return 0, err
+	}
+	return c.Conn.Read(b)
+}
+
+func (c *rwTimeoutConn) Write(b []byte) (int, error) {
+	err := c.Conn.SetWriteDeadline(time.Now().Add(c.rwTimeout))
+	if err != nil {
+		return 0, err
+	}
+	return c.Conn.Write(b)
 }
