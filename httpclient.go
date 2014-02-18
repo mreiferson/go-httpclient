@@ -118,7 +118,7 @@ func (t *Transport) lazyStart() {
 
 			if t.ReadWriteTimeout > 0 {
 				timeoutConn := &rwTimeoutConn{
-					Conn:      c,
+					TCPConn:   c.(*net.TCPConn),
 					rwTimeout: t.ReadWriteTimeout,
 				}
 				return timeoutConn, nil
@@ -171,22 +171,22 @@ func (bci *bodyCloseInterceptor) Close() error {
 
 // A net.Conn that sets a deadline for every Read or Write operation
 type rwTimeoutConn struct {
-	net.Conn
+	*net.TCPConn
 	rwTimeout time.Duration
 }
 
 func (c *rwTimeoutConn) Read(b []byte) (int, error) {
-	err := c.Conn.SetReadDeadline(time.Now().Add(c.rwTimeout))
+	err := c.TCPConn.SetReadDeadline(time.Now().Add(c.rwTimeout))
 	if err != nil {
 		return 0, err
 	}
-	return c.Conn.Read(b)
+	return c.TCPConn.Read(b)
 }
 
 func (c *rwTimeoutConn) Write(b []byte) (int, error) {
-	err := c.Conn.SetWriteDeadline(time.Now().Add(c.rwTimeout))
+	err := c.TCPConn.SetWriteDeadline(time.Now().Add(c.rwTimeout))
 	if err != nil {
 		return 0, err
 	}
-	return c.Conn.Write(b)
+	return c.TCPConn.Write(b)
 }
