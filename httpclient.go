@@ -138,6 +138,24 @@ func (t *Transport) lazyStart() {
 	}
 }
 
+func (t *Transport) CancelRequest(req *http.Request) {
+	t.starter.Do(t.lazyStart)
+
+	t.transport.CancelRequest(req)
+}
+
+func (t *Transport) CloseIdleConnections() {
+	t.starter.Do(t.lazyStart)
+
+	t.transport.CloseIdleConnections()
+}
+
+func (t *Transport) RegisterProtocol(scheme string, rt http.RoundTripper) {
+	t.starter.Do(t.lazyStart)
+
+	t.transport.RegisterProtocol(scheme, rt)
+}
+
 func (t *Transport) RoundTrip(req *http.Request) (resp *http.Response, err error) {
 	t.starter.Do(t.lazyStart)
 
