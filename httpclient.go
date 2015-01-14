@@ -22,7 +22,7 @@ import (
 
 // returns the current version of the package
 func Version() string {
-	return "0.4.2"
+	return "0.4.2-nickvanw"
 }
 
 // Transport implements the RoundTripper interface and can be used as a replacement
