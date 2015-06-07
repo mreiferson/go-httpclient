@@ -194,7 +194,7 @@ type rwTimeoutConn struct {
 }
 
 func (c *rwTimeoutConn) Read(b []byte) (int, error) {
-	err := c.TCPConn.SetReadDeadline(time.Now().Add(c.rwTimeout))
+	err := c.TCPConn.SetDeadline(time.Now().Add(c.rwTimeout))
 	if err != nil {
 		return 0, err
 	}
@@ -202,7 +202,7 @@ func (c *rwTimeoutConn) Read(b []byte) (int, error) {
 }
 
 func (c *rwTimeoutConn) Write(b []byte) (int, error) {
-	err := c.TCPConn.SetWriteDeadline(time.Now().Add(c.rwTimeout))
+	err := c.TCPConn.SetDeadline(time.Now().Add(c.rwTimeout))
 	if err != nil {
 		return 0, err
 	}
