@@ -109,9 +109,11 @@ func TestHttpClient(t *testing.T) {
 	starter.Do(func() { setupMockServer(t) })
 
 	transport := &Transport{
-		ConnectTimeout:   1 * time.Second,
-		RequestTimeout:   5 * time.Second,
-		ReadWriteTimeout: 3 * time.Second,
+		ConnectTimeout:     1 * time.Second,
+		RequestTimeout:     5 * time.Second,
+		ReadWriteTimeout:   3 * time.Second,
+		TCPWriteBufferSize: 64 * 1024,
+		TCPReadBufferSize:  64 * 1024,
 	}
 	client := &http.Client{Transport: transport}
 
