@@ -23,7 +23,7 @@ import (
 
 // returns the current version of the package
 func Version() string {
-	return "0.4.1"
+	return "0.4.2-nickvanw"
 }
 
 // Transport implements the RoundTripper interface and can be used as a replacement
@@ -62,9 +62,19 @@ type Transport struct {
 	// tls.Client. If nil, the default configuration is used.
 	TLSClientConfig *tls.Config
 
+	// TLSHandshakeTimeout specifies the maximum amount of time waiting to
+	// wait for a TLS handshake. Zero means no timeout.
+	TLSHandshakeTimeout time.Duration
+
 	// DisableKeepAlives, if true, prevents re-use of TCP connections
 	// between different HTTP requests.
 	DisableKeepAlives bool
+
+	// KeepAlive specifies the keep-alive period for an active
+	// network connection.
+	// If zero, keep-alives are not enabled. Network protocols
+	// that do not support keep-alives ignore this field.
+	KeepAlive time.Duration
 
 	// DisableCompression, if true, prevents the Transport from
 	// requesting compression with an "Accept-Encoding: gzip"
@@ -120,7 +130,11 @@ func (t *Transport) Close() error {
 func (t *Transport) lazyStart() {
 	if t.Dial == nil {
 		t.Dial = func(netw, addr string) (net.Conn, error) {
-			c, err := net.DialTimeout(netw, addr, t.ConnectTimeout)
+			dialer := &net.Dialer{
+				Timeout:   t.ConnectTimeout,
+				KeepAlive: t.KeepAlive,
+			}
+			c, err := dialer.Dial(netw, addr)
 			if err != nil {
 				return nil, err
 			}
@@ -158,6 +172,7 @@ func (t *Transport) lazyStart() {
 		Dial:                  t.Dial,
 		Proxy:                 t.Proxy,
 		TLSClientConfig:       t.TLSClientConfig,
+		TLSHandshakeTimeout:   t.TLSHandshakeTimeout,
 		DisableKeepAlives:     t.DisableKeepAlives,
 		DisableCompression:    t.DisableCompression,
 		MaxIdleConnsPerHost:   t.MaxIdleConnsPerHost,
