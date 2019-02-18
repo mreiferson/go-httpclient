@@ -21,7 +21,7 @@ import (
 	"time"
 )
 
-// returns the current version of the package
+// Version returns the current version of the package
 func Version() string {
 	return "0.4.1"
 }
